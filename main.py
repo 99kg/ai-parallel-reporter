@@ -401,25 +401,55 @@ def clean_text_for_pdf(text: str, tables_info: list = None) -> list:
 
 
 def add_watermark(canvas, doc):
-    """添加水印"""
-    if not PDF_TEMPLATE.get("watermark"):
+    """添加水印（支持文字或图片）"""
+    from reportlab.platypus import Image as RLImage
+    
+    watermark_text = PDF_TEMPLATE.get("watermark_text")
+    watermark_image = PDF_TEMPLATE.get("watermark_image")
+    
+    if not watermark_text and not watermark_image:
         return
     
-    canvas.saveState()
-    canvas.setFont('Helvetica', 10)
-    canvas.setFillColor(colors.HexColor('#CCCCCC'))
-    
-    # 在页面背景添加水印(对角排列)
     width, height = A4
-    for y in range(0, int(height), 50):
-        for x in range(0, int(width), 150):
-            canvas.saveState()
-            canvas.translate(x + 50, y + 20)
-            canvas.rotate(45)
-            canvas.drawString(0, 0, PDF_TEMPLATE["watermark"])
-            canvas.restoreState()
     
-    canvas.restoreState()
+    # 文字水印
+    if watermark_text:
+        canvas.saveState()
+        canvas.setFont('Helvetica', 12)
+        canvas.setFillColor(colors.HexColor('#E8E8E8'))  # 更淡的灰色
+        
+        for y in range(0, int(height), 60):
+            for x in range(0, int(width), 180):
+                canvas.saveState()
+                canvas.translate(x + 60, y + 30)
+                canvas.rotate(45)
+                canvas.drawString(0, 0, watermark_text)
+                canvas.restoreState()
+        
+        canvas.restoreState()
+    
+    # 图片水印
+    if watermark_image and os.path.exists(watermark_image):
+        try:
+            canvas.saveState()
+            
+            # 加载图片并计算尺寸（水印图片尺寸的1/3）
+            img = RLImage(watermark_image, width=3*cm, height=3*cm)
+            img_w, img_h = 3*cm, 3*cm
+            
+            for y in range(0, int(height), 100):
+                for x in range(0, int(width), 200):
+                    canvas.saveState()
+                    canvas.translate(x + 80, y + 40)
+                    canvas.rotate(30)
+                    # 设置透明度
+                    canvas.setFillAlpha(0.15)
+                    canvas.drawImage(watermark_image, -img_w/2, -img_h/2, width=img_w, height=img_h)
+                    canvas.restoreState()
+            
+            canvas.restoreState()
+        except Exception as e:
+            pass
 
 
 def on_page_number(canvas, doc):
@@ -428,12 +458,14 @@ def on_page_number(canvas, doc):
         return
     
     page_num = canvas.getPageNumber()
-    text = f"第 {page_num} 页"
+    total_pages = doc.page
+    text = f"- {page_num} -"
     
     canvas.saveState()
-    canvas.setFont('Helvetica', 9)
-    canvas.setFillColor(colors.HexColor('#999999'))
-    canvas.drawRightString(A4[0] - 1.5*cm, 1.2*cm, text)
+    canvas.setFont('Helvetica', 10)
+    canvas.setFillColor(colors.HexColor('#888888'))
+    # 居中显示
+    canvas.drawCentredString(A4[0] / 2, 1.2*cm, text)
     canvas.restoreState()
 
 
@@ -1023,9 +1055,9 @@ def generate_pdf_report(question: str, keyword: str, results: list, output_base:
         
         s_color = "#28a745" if status == "已收录" else "#dc3545"
         
-        # 使用带背景的Table作为标题
+        # 使用带背景的Table作为标题（宽度=页面宽度-左右边距）
         header_para = Paragraph(f"{name} 响应分析 <font size='11' color='{s_color}'>[{status}]</font>", h2_style)
-        header_table = Table([[header_para]], colWidths=[17*cm])
+        header_table = Table([[header_para]], colWidths=[18*cm])
         header_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#2D3436')),
             ('TEXTCOLOR', (0, 0), (-1, -1), colors.white),

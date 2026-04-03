@@ -87,7 +87,8 @@ CACHE = {
 PDF_TEMPLATE = {
     "report_title": "AI 智能检索汇总报告",      # 报告标题
     "logo_path": "img/logo.png",               # Logo路径（留空则不显示）
-    "watermark": "水印文字",                    # 水印文字（留空则不显示）
+    "watermark_text": "水印文字",               # 水印文字（留空则不显示）
+    "watermark_image": "",                     # 水印图片路径（留空则不显示，支持文字和图片二选一）
     "company_name": "公司名称",                 # 公司名称（留空则不显示）
     "include_page_number": True,               # 是否显示页码
 }
