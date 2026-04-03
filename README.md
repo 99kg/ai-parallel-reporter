@@ -28,7 +28,7 @@ python main.py
 
 | 平台 | 状态 | 模型 | 注册地址 |
 |------|------|------|---------|
-| 智谱GLM | ✅ | glm-4-flash（免费） | [注册](https://open.bigmodel.cn) |
+| 智谱GLM | ✅ | glm-4-flash | [注册](https://open.bigmodel.cn) |
 | 通义千问 | ✅ | qwen-turbo | [注册](https://dashscope.console.aliyun.com) |
 | DeepSeek | ✅ | deepseek-chat | [注册](https://platform.deepseek.com) |
 | Kimi | ✅ | moonshot-v1-8k | [注册](https://platform.moonshot.cn) |
