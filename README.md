@@ -11,7 +11,7 @@ pip install -r requirements.txt
 # 2. 编辑 config.py，填写 API Key
 
 # 3. 运行
-python main.py "问题内容" "关键词"
+python main.py
 ```
 
 ## 功能特性
@@ -27,7 +27,7 @@ python main.py "问题内容" "关键词"
 ## 支持的AI平台
 
 | 平台 | 状态 | 模型 | 注册地址 |
-:|------|------|------|---------|
+|------|------|------|---------|
 | 智谱GLM | ✅ | glm-4-flash（免费） | [注册](https://open.bigmodel.cn) |
 | 通义千问 | ✅ | qwen-turbo | [注册](https://dashscope.console.aliyun.com) |
 | DeepSeek | ✅ | deepseek-chat | [注册](https://platform.deepseek.com) |

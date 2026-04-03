@@ -14,6 +14,7 @@ import re
 import html
 import hashlib
 import time
+import emoji
 from datetime import datetime
 from openai import AsyncOpenAI
 from pathlib import Path
@@ -23,7 +24,7 @@ from config import MODELS, CACHE, PDF_TEMPLATE, API_CONFIG
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import cm
-from reportlab.platypus import Paragraph, Spacer, Table, TableStyle, HRFlowable
+from reportlab.platypus import Paragraph, Spacer, Table, TableStyle, HRFlowable, PageBreak, Image
 from reportlab.lib import colors
 
 # 解决Windows GBK编码问题
@@ -260,13 +261,14 @@ async def ask_all(question: str, keyword: str = ""):
 # 全局变量记录字体是否已注册
 _font_registered = False
 _chinese_font_name = None
+_chinese_bold_font_name = None
 
 def get_chinese_font():
     """注册并返回系统中可用的中文字体"""
-    global _font_registered, _chinese_font_name
+    global _font_registered, _chinese_font_name, _chinese_bold_font_name
     
     if _font_registered:
-        return _chinese_font_name
+        return _chinese_font_name, _chinese_bold_font_name
     
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
@@ -275,40 +277,51 @@ def get_chinese_font():
     system = platform.system()
 
     if system == "Windows":
-        # Windows中文字体 - 尝试.ttf文件
+        # Windows中文字体
         font_options = [
-            ("C:/Windows/Fonts/simhei.ttf", "simhei"),
-            ("C:/Windows/Fonts/msyhbd.ttc", "msyhbd"),
-            ("C:/Windows/Fonts/simsun.ttc", "simsun"),
+            ("C:/Windows/Fonts/msyh.ttc", "msyh", "C:/Windows/Fonts/msyhbd.ttc", "msyh-Bold"),  # 微软雅黑
+            ("C:/Windows/Fonts/simhei.ttf", "simhei", None, None),                              # 黑体
+            ("C:/Windows/Fonts/simsun.ttc", "simsun", None, None),                              # 宋体
         ]
     elif system == "Darwin":
         font_options = [
-            ("/System/Library/Fonts/STHeiti Light.ttc", "heiti"),
+            ("/System/Library/Fonts/STHeiti Light.ttc", "heiti", None, None),
         ]
     else:
         font_options = [
-            ("/usr/share/fonts/truetype/wqy/wqy-microhei.ttc", "wqy"),
-            ("/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf", "droid"),
+            ("/usr/share/fonts/truetype/wqy/wqy-microhei.ttc", "wqy", None, None),
+            ("/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf", "droid", None, None),
         ]
 
-    for font_path, font_name in font_options:
+    for font_path, font_name, bold_path, bold_name in font_options:
         if os.path.exists(font_path):
             try:
                 font = TTFont(font_name, font_path)
                 pdfmetrics.registerFont(font)
-                # 注册加粗版本
-                try:
-                    bold_font = TTFont(font_name + "-Bold", font_path)
-                    pdfmetrics.registerFont(bold_font)
-                except:
-                    pass
+                
+                # 注册加粗版本（如果提供了单独的粗体文件）
+                if bold_path and os.path.exists(bold_path):
+                    try:
+                        bold_font = TTFont(bold_name, bold_path)
+                        pdfmetrics.registerFont(bold_font)
+                        _chinese_bold_font_name = bold_name
+                    except:
+                        _chinese_bold_font_name = font_name  # 回退到普通字体
+                else:
+                    try:
+                        bold_font = TTFont(font_name + "-Bold", font_path)
+                        pdfmetrics.registerFont(bold_font)
+                        _chinese_bold_font_name = font_name + "-Bold"
+                    except:
+                        _chinese_bold_font_name = font_name  # 回退到普通字体
+                
                 _chinese_font_name = font_name
                 _font_registered = True
-                return font_name
+                return font_name, _chinese_bold_font_name
             except Exception as e:
                 continue
 
-    return "Helvetica"
+    return "Helvetica", "Helvetica-Bold"
 
 def parse_markdown_tables(text: str) -> list:
     """解析Markdown表格,返回 [(table_data, start_pos, end_pos), ...]"""
@@ -424,26 +437,32 @@ def on_page_number(canvas, doc):
     canvas.restoreState()
 
 
-def render_markdown_content(text: str, chinese_font: str) -> list:
+def render_markdown_content(text: str, chinese_font: str, bold_font: str = None) -> list:
     """使用 mistune 将 Markdown 转换为 ReportLab 元素列表"""
     import mistune
     import re
     
+    if bold_font is None:
+        bold_font = chinese_font
+    
+    # 移除无法渲染的 Emoji
+    text = emoji.replace_emoji(text, replace="")
+    
     elements = []
     
-    # 创建各种样式（h3-h6 使用黑色加粗）
-    md_h1_style = ParagraphStyle('MDH1', fontName=chinese_font, fontSize=14,
+    # 创建各种样式（标题使用加粗字体）
+    md_h1_style = ParagraphStyle('MDH1', fontName=bold_font, fontSize=14,
                                   spaceBefore=15, spaceAfter=8, textColor=colors.HexColor('#2D3436'))
-    md_h2_style = ParagraphStyle('MDH2', fontName=chinese_font, fontSize=12,
+    md_h2_style = ParagraphStyle('MDH2', fontName=bold_font, fontSize=12,
                                   spaceBefore=12, spaceAfter=6, textColor=colors.HexColor('#333333'))
-    # h3-h6 使用黑色样式（通过 <b> 标签实现加粗）
-    md_h3_style = ParagraphStyle('MDH3', fontName=chinese_font, fontSize=11,
+    # h3-h6 使用加粗字体
+    md_h3_style = ParagraphStyle('MDH3', fontName=bold_font, fontSize=11,
                                   spaceBefore=10, spaceAfter=6, textColor=colors.black, leading=14)
-    md_h4_style = ParagraphStyle('MDH4', fontName=chinese_font, fontSize=10,
+    md_h4_style = ParagraphStyle('MDH4', fontName=bold_font, fontSize=10,
                                   spaceBefore=8, spaceAfter=4, textColor=colors.black, leading=13)
-    md_h5_style = ParagraphStyle('MDH5', fontName=chinese_font, fontSize=9,
+    md_h5_style = ParagraphStyle('MDH5', fontName=bold_font, fontSize=9,
                                   spaceBefore=6, spaceAfter=3, textColor=colors.black, leading=12)
-    md_h6_style = ParagraphStyle('MDH6', fontName=chinese_font, fontSize=9,
+    md_h6_style = ParagraphStyle('MDH6', fontName=bold_font, fontSize=9,
                                   spaceBefore=6, spaceAfter=3, textColor=colors.black, leading=12)
     md_content_style = ParagraphStyle('MDContent', fontName=chinese_font, fontSize=9, leading=14)
     
@@ -476,7 +495,7 @@ def render_markdown_content(text: str, chinese_font: str) -> list:
     
     # 无序列表符号
     ul_bullets = ['•', '◦', '▪', '▸']
-    
+
     # 创建 Markdown 解析器
     md = mistune.create_markdown(plugins=['table', 'strikethrough'])
     
@@ -742,20 +761,6 @@ def render_markdown_content(text: str, chinese_font: str) -> list:
     
     return elements
     
-    # 逐行处理 HTML
-    html_lines = html.split('\n')
-    for line in html_lines:
-        line = line.strip()
-        if not line:
-            elements.append(Spacer(1, 6))
-            continue
-        
-        # 使用递归解析器处理每一行
-        parsed = parse_html_content(line)
-        elements.extend(parsed)
-    
-    return elements
-
 
 def _html_to_reportlab(text: str) -> str:
     """将 HTML 标签转换为 ReportLab 支持的格式"""
@@ -791,8 +796,7 @@ def add_table_to_story(text: str, content_style: ParagraphStyle, cell_style: Par
     from reportlab.pdfbase import pdfmetrics
     
     # 获取当前注册的字体名
-    chinese_font = get_chinese_font()
-    bold_font = chinese_font + "-Bold" if chinese_font != "Helvetica" else "Helvetica-Bold"
+    chinese_font, bold_font = get_chinese_font()
     
     elements = []
     tables_info = parse_markdown_tables(text)
@@ -882,7 +886,7 @@ def generate_pdf_report(question: str, keyword: str, results: list, output_base:
     except ImportError:
         return None
     
-    chinese_font = get_chinese_font()
+    chinese_font, bold_font = get_chinese_font()
 
     # 生成PDF文件名: AI_Analysis_Report_问题_关键词_时间戳
     safe_question = re.sub(r'[\\/:*?"<>|]', '', question)[:20]  # 移除非法字符，截取前20字
@@ -899,18 +903,18 @@ def generate_pdf_report(question: str, keyword: str, results: list, output_base:
     story = []
 
     # --- 样式定义 ---
-    title_style = ParagraphStyle('Title', fontName=chinese_font, fontSize=24, spaceAfter=20, 
-                                  textColor=colors.HexColor('#2D3436'))
+    title_style = ParagraphStyle('Title', fontName=bold_font, fontSize=24, spaceAfter=20, 
+                                 textColor=colors.HexColor('#2D3436'))
     meta_style = ParagraphStyle('Meta', fontName=chinese_font, fontSize=10, textColor=colors.HexColor('#666666'))
-    # 基础h2样式(用于Table内的文字)
-    h2_style = ParagraphStyle('H2', fontName=chinese_font, fontSize=14, 
+    # 详情页标题栏样式(用于标题背景Table)
+    h2_style = ParagraphStyle('H2', fontName=bold_font, fontSize=14, 
                               textColor=colors.white, leading=18)
     # Markdown标题样式
-    md_h1_style = ParagraphStyle('MDH1', fontName=chinese_font, fontSize=14,
+    md_h1_style = ParagraphStyle('MDH1', fontName=bold_font, fontSize=14,
                                   spaceBefore=15, spaceAfter=8, textColor=colors.HexColor('#2D3436'))
-    md_h2_style = ParagraphStyle('MDH2', fontName=chinese_font, fontSize=12, 
+    md_h2_style = ParagraphStyle('MDH2', fontName=bold_font, fontSize=12, 
                                   spaceBefore=12, spaceAfter=6, textColor=colors.HexColor('#333333'))
-    md_h3_style = ParagraphStyle('MDH3', fontName=chinese_font, fontSize=10, 
+    md_h3_style = ParagraphStyle('MDH3', fontName=bold_font, fontSize=10, 
                                   spaceBefore=8, spaceAfter=4, textColor=colors.HexColor('#555555'))
     md_content_style = ParagraphStyle('MDContent', fontName=chinese_font, fontSize=9, leading=14)
     md_list_style = ParagraphStyle('MDList', fontName=chinese_font, fontSize=9, leading=13, 
@@ -1001,7 +1005,7 @@ def generate_pdf_report(question: str, keyword: str, results: list, output_base:
     story.append(Spacer(1, 0.5*cm))
     timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
     story.append(Paragraph(
-        f"<font color='#CCCCCC'>报告编号: AI-{timestamp} | 声明:本报告由 Multi-AI Parallel 系统生成,内容仅供参考。</font>", 
+        f"<font color='#CCCCCC'>报告编号：AI-{timestamp} | 声明：本报告由 AI PARALLEL REPORTER 系统生成，内容仅供参考。</font>", 
         cell_style
     ))
 
@@ -1038,7 +1042,7 @@ def generate_pdf_report(question: str, keyword: str, results: list, output_base:
             story.append(Paragraph(f"<font color='red'>错误提示:{error}</font>", content_style))
         else:
             # 使用 Markdown 渲染器处理格式
-            elements = render_markdown_content(answer, chinese_font)
+            elements = render_markdown_content(answer, chinese_font, bold_font)
             for elem in elements:
                 story.append(elem)
         
@@ -1048,7 +1052,7 @@ def generate_pdf_report(question: str, keyword: str, results: list, output_base:
     if detail_results:
         story.append(Spacer(1, 1*cm))
         story.append(Paragraph(
-            f"<font color='#CCCCCC'>报告编号: AI-{timestamp} | 声明:本报告由 Multi-AI Parallel 系统生成,内容仅供参考。</font>", 
+            f"<font color='#CCCCCC'>报告编号：AI-{timestamp} | 声明：本报告由 AI PARALLEL REPORTER 系统生成，内容仅供参考。</font>", 
             cell_style
         ))
 
@@ -1166,11 +1170,6 @@ async def run_batch_questions(file_path: str):
                 "pdf_path": str(pdf_path) if pdf_path else None
             }
         
-        # 间隔时间(避免API限流)
-        if idx < len(questions):
-            print(f"\n等待2秒后继续...")
-            await asyncio.sleep(2)
-    
     # 保存汇总JSON到log目录
     summary_path = log_dir / f"{timestamp}_summary.json"
     with open(summary_path, 'w', encoding='utf-8') as f:
