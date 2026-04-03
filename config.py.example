@@ -79,26 +79,25 @@ CACHE = {
     "enabled": True,              # 是否启用缓存
     "cache_dir": "cache",         # 缓存目录
     "cache_ttl": 3600,            # 缓存有效期（秒）
-    "allow_duplicate": True,      # True=使用缓存，False=忽略缓存
+    "allow_duplicate": True,      # True=相同问题使用缓存，False=忽略缓存重新请求
 }
 
 # ========== PDF报告模板配置 ==========
 
 PDF_TEMPLATE = {
-    "report_title": "AI 智能检索汇总报告",      # 报告标题
-    "logo_path": "img/logo.png",               # Logo路径（留空则不显示）
-    "watermark_text": "水印文字",               # 水印文字（留空则不显示）
-    "watermark_image": "",                     # 水印图片路径（留空则不显示，支持文字和图片二选一）
-    "company_name": "公司名称",                 # 公司名称（留空则不显示）
-    "include_page_number": True,               # 是否显示页码
+    "report_title": "AI 智能检索汇总报告",    # 报告标题
+    "logo_path": "img/logo.png",             # Logo图片路径（留空则不显示）
+    "watermark_text": "",                     # 水印文字（留空则不显示）
+    "watermark_image": "",                   # 水印图片路径（留空则不显示）
+    "company_name": "",                      # 公司/组织名称（留空则不显示）
+    "include_page_number": True,             # 是否显示页码
+    "meta_color": "#666666",                  # 元信息文字颜色
 }
 
 # ========== API请求配置 ==========
 
 API_CONFIG = {
     "timeout": 30,           # 请求超时时间（秒）
-    "max_retries": 2,        # 最大重试次数
-    "concurrency": 5,        # 最大并发数
     "temperature": 0.1,      # 生成温度（越低越稳定）
     "max_tokens": 2048,      # 最大输出Token
 }

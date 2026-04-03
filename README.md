@@ -19,10 +19,10 @@ python main.py
 - **并行提问**：同时向多个AI平台发送问题，快速获取多方回答
 - **关键词检测**：自动检测回答中是否包含指定关键词，标记收录状态
 - **结果缓存**：相同问题短期内自动使用缓存，节省API成本
-- **进度显示**：实时显示各AI请求进度和状态
+- **进度显示**：实时显示各AI请求进度、状态和缓存标记
 - **批量处理**：支持从文件读取多个问题，依次处理
-- **PDF报告**：生成专业商务报告，支持水印、页码、Logo、Markdown格式
-- **Markdown渲染**：支持多级标题、加粗、列表、引用、代码块等格式
+- **PDF报告**：生成专业商务报告，支持水印、页码、Logo
+- **Markdown渲染**：支持多级标题、加粗、斜体、列表、引用、代码块、表格等格式
 
 ## 支持的AI平台
 
@@ -82,7 +82,7 @@ CACHE = {
     "enabled": True,              # 是否启用缓存
     "cache_dir": "cache",         # 缓存目录
     "cache_ttl": 3600,            # 缓存有效期（秒）
-    "allow_duplicate": True,      # True=使用缓存，False=忽略缓存
+    "allow_duplicate": True,      # True=相同问题使用缓存，False=忽略缓存重新请求
 }
 ```
 
@@ -92,9 +92,10 @@ PDF_TEMPLATE = {
     "report_title": "AI 智能检索汇总报告",    # 报告标题
     "logo_path": "img/logo.png",            # Logo路径（留空则不显示）
     "watermark_text": "水印文字",            # 水印文字（留空则不显示）
-    "watermark_image": "",                  # 水印图片路径（留空则不显示，支持文字和图片同时配置）
+    "watermark_image": "",                  # 水印图片路径（留空则不显示）
     "company_name": "公司名称",              # 公司名称（留空则不显示）
     "include_page_number": True,            # 是否显示页码
+    "meta_color": "#666666",                # 元信息文字颜色
 }
 ```
 
@@ -102,8 +103,6 @@ PDF_TEMPLATE = {
 ```python
 API_CONFIG = {
     "timeout": 30,           # 请求超时（秒）
-    "max_retries": 2,        # 最大重试次数
-    "concurrency": 5,        # 最大并发数
     "temperature": 0.1,      # 生成温度（越低越稳定）
     "max_tokens": 2048,      # 最大输出Token
 }

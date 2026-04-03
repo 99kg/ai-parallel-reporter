@@ -57,6 +57,10 @@ def get_cached_result(question: str, keyword: str, model_name: str) -> tuple:
     if not CACHE["enabled"]:
         return None, None
     
+    # allow_duplicate=False 时不使用缓存，直接返回 None
+    if not CACHE.get("allow_duplicate", True):
+        return None, None
+    
     cache_key = get_cache_key(question, keyword, model_name)
     cache_file = CACHE_DIR / f"{cache_key}.json"
     
