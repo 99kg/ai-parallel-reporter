@@ -1,0 +1,103 @@
+"""
+多AI并行问答工具 - 配置文件示例
+请复制此文件为 config.py，并填入你的API Key
+enabled=True 启用该AI，False 禁用
+"""
+
+# ========== API Key 配置 ==========
+
+MODELS = {
+    "DeepSeek": {
+        "enabled": True,
+        "base_url": "https://api.deepseek.com/v1",
+        "api_key": "your-deepseek-api-key",
+        "model": "deepseek-chat",
+        "register": "https://platform.deepseek.com",
+        "note": "注册送额度，价格极低",
+    },
+    "豆包": {
+        "enabled": False,
+        "base_url": "https://ark.cn-beijing.volces.com/api/v3",
+        "api_key": "your-doubao-api-key",
+        "model": "doubao-seed-2-0-lite-260215",
+        "register": "https://console.volcengine.com/ark",
+        "note": "火山引擎创建推理接入点",
+    },
+    "腾讯元宝": {
+        "enabled": False,
+        "base_url": "https://api.hunyuan.cloud.tencent.com/v1",
+        "api_key": "your-tencent-api-key",
+        "model": "hunyuan-pro",
+        "register": "https://console.cloud.tencent.com/hunyuan",
+        "note": "元宝背后是混元大模型",
+    },
+    "通义千问": {
+        "enabled": False,
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "api_key": "your-aliyun-api-key",
+        "model": "qwen-turbo",
+        "register": "https://dashscope.console.aliyun.com",
+        "note": "阿里云平台，有免费额度",
+    },
+    "文心一言": {
+        "enabled": False,
+        "base_url": "https://qianfan.baidubce.com/v2",
+        "api_key": "your-baidu-api-key",
+        "model": "ernie-4.5-21b-a3b-thinking",
+        "register": "https://console.bce.baidu.com/qianfan",
+        "note": "百度千帆平台申请",
+    },
+    "Kimi": {
+        "enabled": False,
+        "base_url": "https://api.moonshot.cn/v1",
+        "api_key": "your-kimi-api-key",
+        "model": "moonshot-v1-8k",
+        "register": "https://platform.moonshot.cn",
+        "note": "月之暗面，支持长上下文",
+    },
+    "智谱GLM": {
+        "enabled": False,
+        "base_url": "https://open.bigmodel.cn/api/paas/v4",
+        "api_key": "your-zhipu-api-key",
+        "model": "glm-4-flash",
+        "register": "https://open.bigmodel.cn",
+        "note": "glm-4-flash 完全免费",
+    },
+    "纳米AI": {
+        "enabled": False,
+        "base_url": "https://api.360.com/v1",
+        "api_key": "your-360-api-key",
+        "model": "360gpt2",
+        "register": "https://ai.360.com/open",
+        "note": "360智脑API",
+    },
+}
+
+# ========== 功能开关 ==========
+
+CACHE = {
+    "enabled": True,              # 是否启用缓存
+    "cache_dir": "cache",         # 缓存目录
+    "cache_ttl": 3600,            # 缓存有效期（秒）
+    "allow_duplicate": True,      # True=使用缓存，False=忽略缓存
+}
+
+# ========== PDF报告模板配置 ==========
+
+PDF_TEMPLATE = {
+    "report_title": "AI 智能检索汇总报告",      # 报告标题
+    "logo_path": "img/logo.png",               # Logo路径（留空则不显示）
+    "watermark": "水印文字",                    # 水印文字（留空则不显示）
+    "company_name": "公司名称",                 # 公司名称（留空则不显示）
+    "include_page_number": True,               # 是否显示页码
+}
+
+# ========== API请求配置 ==========
+
+API_CONFIG = {
+    "timeout": 30,           # 请求超时时间（秒）
+    "max_retries": 2,        # 最大重试次数
+    "concurrency": 5,        # 最大并发数
+    "temperature": 0.1,      # 生成温度（越低越稳定）
+    "max_tokens": 2048,      # 最大输出Token
+}
