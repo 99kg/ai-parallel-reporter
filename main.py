@@ -121,62 +121,83 @@ def print_progress(current: int, total: int, name: str, status: str = ""):
     percent = int(100 * current / total)
     
     status_text = f" [{status}]" if status else ""
-    print(f"\r[{current}/{total}] {percent}% {name}{status_text:<8}{bar}", end='', flush=True)
+    # 用空格填充确保覆盖旧内容
+    output = f"[{current}/{total}] {percent}% {name}{status_text:<8}{bar}"
+    print(f"\r{output:<60}", end='', flush=True)
     
     if current >= total:
-        print()  # 完成后换行
+        print(flush=True)  # 完成后换行
+
+
+def print_summary_header(question: str, keyword: str):
+    """打印汇总表头"""
+    print("\n" + "=" * 50)
+    print(f"  问题:{question}")
+    if keyword:
+        print(f"  关键词:{keyword}")
+    print("=" * 50)
 
 
 # ========== 核心代码 ==========
 
 async def ask_one_ai(name: str, config: dict, question: str, keyword: str = ""):
-    """向单个AI提问"""
+    """向单个AI提问，支持重试机制"""
     # 检查缓存
     cached_answer, cached_info = get_cached_result(question, keyword, name)
     if cached_answer is not None:
         return name, cached_answer, None, cached_info, True  # 最后一个参数表示来自缓存
     
-    try:
-        api_key = get_api_key(config)
-        if not api_key:
-            return name, None, "API Key未配置", None, False
-        
-        # 豆包不支持timeout参数
-        if name == "豆包":
-            client = AsyncOpenAI(
-                base_url=config["base_url"],
-                api_key=api_key,
+    max_retries = API_CONFIG.get("max_retries", 2)
+    last_error = None
+    
+    for attempt in range(max_retries):
+        try:
+            api_key = get_api_key(config)
+            if not api_key:
+                return name, None, "API Key未配置", None, False
+            
+            # 豆包不支持timeout参数
+            if name == "豆包":
+                client = AsyncOpenAI(
+                    base_url=config["base_url"],
+                    api_key=api_key,
+                )
+            else:
+                client = AsyncOpenAI(
+                    base_url=config["base_url"],
+                    api_key=api_key,
+                    timeout=API_CONFIG["timeout"],
+                )
+            # Kimi 模型只支持 temperature=1.0
+            temperature = 1.0 if name == "Kimi" else API_CONFIG["temperature"]
+            response = await client.chat.completions.create(
+                model=config["model"],
+                messages=[{"role": "user", "content": question}],
+                temperature=temperature,
+                max_tokens=API_CONFIG["max_tokens"],
             )
-        else:
-            client = AsyncOpenAI(
-                base_url=config["base_url"],
-                api_key=api_key,
-                timeout=API_CONFIG["timeout"],
-            )
-        response = await client.chat.completions.create(
-            model=config["model"],
-            messages=[{"role": "user", "content": question}],
-            temperature=API_CONFIG["temperature"],
-            max_tokens=API_CONFIG["max_tokens"],
-        )
-        answer = response.choices[0].message.content
-        usage = response.usage
+            answer = response.choices[0].message.content
+            usage = response.usage
 
-        status = check_keyword_in_answer(answer, keyword)
-        asked_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        info = {
-            "prompt_tokens": usage.prompt_tokens if usage else 0,
-            "completion_tokens": usage.completion_tokens if usage else 0,
-            "keyword_status": status,
-            "asked_at": asked_time,  # 保存原始提问时间
-        }
-        
-        # 保存到缓存
-        save_to_cache(question, keyword, name, answer, info)
-        
-        return name, answer, None, info, False
-    except Exception as e:
-        return name, None, str(e), None, False
+            status = check_keyword_in_answer(answer, keyword)
+            asked_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            info = {
+                "prompt_tokens": usage.prompt_tokens if usage else 0,
+                "completion_tokens": usage.completion_tokens if usage else 0,
+                "keyword_status": status,
+                "asked_at": asked_time,
+            }
+            
+            # 保存到缓存
+            save_to_cache(question, keyword, name, answer, info)
+            
+            return name, answer, None, info, False
+        except Exception as e:
+            last_error = str(e)
+            if attempt < max_retries - 1:
+                await asyncio.sleep(1)  # 重试前等待1秒
+    
+    return name, None, f"重试{max_retries}次后失败: {last_error}", None, False
 
 
 def get_enabled_models():
@@ -204,58 +225,56 @@ async def ask_all(question: str, keyword: str = ""):
         return []
 
     total = len(ready)
-    print(f"\n正在向 {total} 个AI提问中...")
-    print(f"关键词监控:{keyword if keyword else '未设置'}")
-    print(f"缓存功能:{'启用' if CACHE['enabled'] else '禁用'}\n")
+    print(f"\n{'=' * 50}", flush=True)
+    print(f"  正在向 {total} 个AI提问...", flush=True)
+    print(f"  关键词:{keyword if keyword else '未设置'}", flush=True)
+    print(f"  缓存:{'启用' if CACHE['enabled'] else '禁用'}", flush=True)
+    print(f"  重试:{API_CONFIG.get('max_retries', 2)}次", flush=True)
+    print(f"{'=' * 50}", flush=True)
+    print(flush=True)
 
-    tasks = []
+    # 创建所有任务并立即启动，保持原始顺序
+    task_list = []
+    name_order = []
     for name, config in ready.items():
-        tasks.append(ask_one_ai(name, config, question, keyword))
+        task_list.append(asyncio.create_task(ask_one_ai(name, config, question, keyword)))
+        name_order.append(name)
     
-    # 逐个执行任务并显示进度
-    results = []
-    for i, task in enumerate(tasks, 1):
-        result = await task
-        results.append(result)
+    # 等待任务完成，每完成一个立即显示进度
+    results_dict = {}
+    completed = 0
+    # asyncio.as_completed 按完成顺序返回任务
+    for coro in asyncio.as_completed(task_list):
+        result = await coro
+        results_dict[result[0]] = result
+        completed += 1
         if result[4]:  # 来自缓存
             status = "缓存"
         else:
             status = "完成"
-        print_progress(i, total, result[0], status)
+        print_progress(completed, total, result[0], status)
+    
+    # 按原始顺序排列结果
+    results = [results_dict[name] for name in name_order]
 
-    # 格式化输出
-    print("\n" + "=" * 70)
-    print(f"  问题:{question}")
-    if keyword:
-        print(f"  关键词:{keyword}")
-    print("=" * 70)
+    # 打印汇总表头
+    print_summary_header(question, keyword)
 
-    # 统计缓存命中数量
+    # 统计信息
     cached_count = sum(1 for _, _, _, _, c in results if c)
-    if cached_count > 0 and CACHE["enabled"]:
-        print(f"\n[缓存] 本次有 {cached_count} 个平台使用了缓存结果")
-        print(f"       如需重新请求,请在 config.py 中设置 cache_ttl 为更小值或清空 cache 目录\n")
-
-    for name, answer, error, info, from_cache in results:
-        status = info.get("keyword_status", "未检测") if info else "未检测"
-        token_info = f"(输入{info['prompt_tokens']}字 / 输出{info['completion_tokens']}字)" if info and info.get('prompt_tokens') else ""
-        cache_tag = " [缓存]" if from_cache else ""
-
-        print(f"\n{'─' * 60}")
-        print(f"  {name} {token_info}{cache_tag}")
-        print(f"  收录状态:{status}")
-        print(f"{'─' * 60}")
-        if error:
-            print(f"  错误:{error}")
-        else:
-            print(f"  {answer}")
-
-    print(f"\n{'=' * 70}")
     success = sum(1 for _, a, e, _, _ in results if a and not e)
-    print(f"  共 {len(results)} 个AI响应,{success} 个成功")
-    if cached_count > 0:
-        print(f"  [缓存] {cached_count} 个来自缓存")
-    print(f"{'=' * 70}")
+    failed = sum(1 for _, _, e, _, _ in results if e)
+    error_results = [(n, e) for n, _, e, _, _ in results if e]
+
+    # 打印汇总
+    print(f"\n[汇总] 共 {len(results)} 个AI | {success} 成功 | {failed} 失败 | {cached_count} 缓存命中")
+    if cached_count > 0 and CACHE["enabled"]:
+        print(f"如需重新请求,请设置 allow_duplicate=False 或清空 cache 目录\n")
+    if error_results:
+        for name, error in error_results:
+            print(f"[{name}] {error}")
+
+    print(f"{'=' * 50}")
 
     # 返回时去掉from_cache标记
     return [(n, a, e, i) for n, a, e, i, _ in results]
@@ -925,8 +944,10 @@ def generate_pdf_report(question: str, keyword: str, results: list, output_base:
     chinese_font, bold_font = get_chinese_font()
 
     # 生成PDF文件名: AI_Analysis_Report_问题_关键词_时间戳
-    safe_question = re.sub(r'[\\/:*?"<>|]', '', question)[:20]  # 移除非法字符，截取前20字
-    safe_keyword = re.sub(r'[\\/:*?"<>|]', '', keyword)[:10]   # 移除非法字符，截取前10字
+    # 移除 Windows 不允许的非法字符（包括中英文标点）
+    illegal_chars = r'[\\/:*?"<>|！？，。""''【】（）]'
+    safe_question = re.sub(illegal_chars, '', question)[:20]  # 移除非法字符，截取前20字
+    safe_keyword = re.sub(illegal_chars, '', keyword)[:10]     # 移除非法字符，截取前10字
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     pdf_filename = f"AI_Analysis_Report_[{safe_question} - {safe_keyword}]_{timestamp}.pdf"
     pdf_path = output_base / pdf_filename
@@ -1176,7 +1197,7 @@ async def run_batch_questions(file_path: str):
         print("  哪个中介口碑比较好|链家")
         return
     
-    print(f"已加载 {len(questions)} 个问题\n")
+    print(f"已加载 {len(questions)} 个问题")
     
     # 创建log目录
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1192,9 +1213,7 @@ async def run_batch_questions(file_path: str):
         question = item["question"]
         keyword = item["keyword"]
         
-        print(f"\n{'=' * 50}")
         print(f"进度:{idx}/{len(questions)}")
-        print(f"{'=' * 50}")
         
         # 依次执行每个问题
         results, pdf_path = await run_with_pdf(question, keyword, pdf_output)
@@ -1211,9 +1230,7 @@ async def run_batch_questions(file_path: str):
     with open(summary_path, 'w', encoding='utf-8') as f:
         json.dump(all_results, f, ensure_ascii=False, indent=2)
     
-    print(f"\n{'=' * 50}")
     print("批量处理完成！")
-    print(f"{'=' * 50}")
     print(f"PDF输出目录:{pdf_output}")
     print(f"汇总文件:{summary_path}")
     print(f"{'=' * 50}")

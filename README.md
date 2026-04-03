@@ -79,10 +79,10 @@ MODELS = {
 ### 功能开关
 ```python
 CACHE = {
-    "enabled": True,              # 是否启用缓存
+    "enabled": True,              # True = 启用缓存读写功能， False = 不使用缓存
     "cache_dir": "cache",         # 缓存目录
     "cache_ttl": 3600,            # 缓存有效期（秒）
-    "allow_duplicate": True,      # True=相同问题使用缓存，False=忽略缓存重新请求
+    "allow_duplicate": True,      # True=相同问题使用缓存，False=忽略缓存，强制重新请求
 }
 ```
 
@@ -103,6 +103,7 @@ PDF_TEMPLATE = {
 ```python
 API_CONFIG = {
     "timeout": 30,           # 请求超时（秒）
+    "max_retries": 2,        # 请求失败时最大重试次数
     "temperature": 0.1,      # 生成温度（越低越稳定）
     "max_tokens": 2048,      # 最大输出Token
 }
