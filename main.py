@@ -1225,6 +1225,12 @@ async def run_batch_questions(file_path: str):
                 "pdf_path": str(pdf_path) if pdf_path else None
             }
         
+        # 问题间等待，防止 API 限流（最后一个问题不需要等待）
+        interval = CACHE.get("batch_interval", 3)
+        if idx < len(questions) and interval > 0:
+            print(f"等待 {interval} 秒后继续...")
+            await asyncio.sleep(interval)
+        
     # 保存汇总JSON到log目录
     summary_path = log_dir / f"{timestamp}_summary.json"
     with open(summary_path, 'w', encoding='utf-8') as f:

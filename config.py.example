@@ -80,6 +80,7 @@ CACHE = {
     "cache_dir": "cache",         # 缓存目录
     "cache_ttl": 3600,            # 缓存有效期（秒）
     "allow_duplicate": True,      # True=相同问题使用缓存，False=忽略缓存，强制重新请求
+    "batch_interval": 3,          # 批量处理间隔（秒）
 }
 
 # ========== PDF报告模板配置 ==========
